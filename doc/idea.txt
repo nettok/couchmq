@@ -1,0 +1,91 @@
+Generalización de la idea anterior - Usar CouchDB como una cola de mensajes
+===========================================================================
+
+La idea del sistema de distribucion de trabajo esta basado en una cola de distribucion de mensajes.
+
+En lugar de diseñar una cola de mensajes especifica para trabajo distribuido, es mejor generalizar
+la idea y luego implementar el sistema distribucion de trabajo sobre esta generalizacion.
+
+Otros sistemas similares
+------------------------
+	- http://code.google.com/p/couch-rqs/
+
+
+Sistema de distribucion de trabajo con CouchDB
+==============================================
+
+¿Que es?
+--------
+
+¿Porque?
+--------
+
+¿Porque CouchDB?
+-----------------
+
+CouchDB provee:
+	- Persistencia
+	- Disponibilidad
+	- Replicacion
+	- API Restful
+	- Permite utilizar herramientas de balanceo de carga para HTTP (HAProxy?)
+	- ...
+
+
+Problema #1
+-----------
+
+Latencia entre clientes trabajadores y servidor para la notificacion de tareas.
+
+* Solucion:
+	La solucion parece ser esta http://guide.couchdb.org/draft/notifications.html#continuous
+
+
+Problema #2
+-----------
+
+Varios clientes se podran conectar a CouchDB para recibir notificaciones de tareas nuevas, el
+problema consiste en que todos los clientes recibirar todas las notificaciones.
+
+Se necesita una forma de coordinar a los clientes para que cada uno realize una tarea diferente.
+
+* Posible solucion:
+	Al crearse una tarea se utilizaran 2 bases de datos, con una de estas es que los clientes
+	obtendran las notificaciones de tareas nuevas.  La otra base de datos se utilizara para
+	determinar si un cliente, (y que cliente?), trabajador ya esta realizando la tarea.
+	
+	Para esto en la 2a base de datos, se utilizara un "update handler" el cual, cuando un cliente
+	trabajador intenta asignarse la tarea, el "update handler" verificara que otro cliente
+	trabajador no se haya asignado la tarea, y devolvera un mensaje de Ok o de Error, segun si la
+	tarea esta disponible y fue asignada a el o no.
+	
+	Para el "feed de cambios" (1a base de datos), se debera utilizar un filtro que toma en cuenta
+	si las tareas ya fueron asignadas utilizando la informacion de la 2a base de datos.
+	
+	Tambien se podria tener un "feed de cambios" para la 2a base de datos, de esta manera los
+	trabajadores pueden conocer con anticipacion los trabajos que ya fueron asignados.
+	
+* Solucion implementada por Couch-RQS:
+	When a process asks RQS for a message, RQS checks the CouchDB view for the next messages.
+	It then attempts to update the first message in the view by adding a field called "lock".
+	If that update succeeds then RQS delivers that message to the process. The message is gone
+	from the view because the view's map function specifies that its messages must not contain a
+	"lock" field.
+
+	Now let's examine what happens when multiple processes ask the queue for a message concurrently.
+	If both processes see a message, then both attempt to update it with a lock, the first update
+	will succeed, and the message will get a new revision number that will be delivered to that
+	process. The second update will be rejected because the revision that this second process is
+	aware of is now out-of-date. The process will simply attempt to update the next message in the
+	queue (which is a CouchDB view). This is a kind of high level atomic test-and-set lock mechanism
+	that relies on CouchDB's own locking mechanism underneath.
+
+	When a process is done with a message and wishes to delete it from the queue, it simply sends a
+	delete request to CouchDB, specifying the revision number it got when it has acquired the lock
+	on that message.
+
+	If you wish to provide a visibility window functionality - messages becoming unlocked and thus
+	reappearing in the queue if not deleted within a preset period, RQS starts a thread that
+	periodically samples a CouchDB view of locked messages ordered by
+	lock timestamp + visibility timeout. All messages for which the timestamp + visibility timeout
+	sum is earlier than the current time get unlocked: their "lock" field is deleted.

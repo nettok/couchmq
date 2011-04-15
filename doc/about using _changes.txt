@@ -1,0 +1,51 @@
+A pattern I've recommended for this scenario is to use time-based
+databases (and this really needs a fancy name);
+
+If you intend to use couchdb as a journal of sorts, where you insert
+things with one process and have another reading them via _changes and
+deleting them on completion (i.e, a consumer/producer workflow) then
+consider using one database for a period of time (a smaller period for
+higher volumes of update). At some point, you'll say create another
+database and switch the producer to write to that instead. When the
+consumer has consumed the last message from the old database, it can
+delete it.
+
+In this way, you leave all of the metadata overhead behind you after
+some period of time.
+
+B.
+
+On Fri, Jan 28, 2011 at 5:55 PM, Adam Kocoloski <kocolosk@...> wrote:
+> On Jan 28, 2011, at 11:47 AM, kowsik wrote:
+>
+>> Messing with Couch _changes, trying to understand the inner workings.
+>> Here are some observations:
+>>
+>> If I add x documents and delete them and further compact the database,
+>> then it seems that fragments of these deleted documents are still kept
+>> around (for the _changes feed). Is this true?
+>
+> Yes.
+>
+>> I have an application that uses Couch as a message queue. Messages are
+>> posted, the _changes listeners pick them up, process them and when
+>> they are done, delete these messages. It looks like the deleted
+>> document fragments are kept around forever. The implications to me is
+>> that the database size is going to grow and grow even after
+>> compaction.
+>>
+>> Is there a way to tell Couch only to keep the last x changes?
+>
+> The only way to remove all traces of a document from a database is to use _purge.  But that has a bit of a nasty
+side-effect with view indexes - if you _purge twice without updating the index in between the index will be
+rebuilt from scratch (because it loses track of what it needs to remove).  Regards,
+>
+> Adam
+>
+>>
+>> Thanks,
+>>
+>> K.
+>> ---
+>> http://twitter.com/pcapr
+>> http://labs.mudynamics.com

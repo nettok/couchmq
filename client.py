@@ -1,28 +1,43 @@
 from couchdbkit import Server, Consumer
 
+from restkit.errors import NoMoreData
+
+from utils import patch_restkit
+patch_restkit()
+
 
 COUCHDB = "http://nettok:2600@ernesto-m.iriscouch.com/"
 DB = "mq0"
 
 
-def consume_msg(msg):
-    print msg
+class ChangesWaiter(object):
+    def __init__(self, db, since=0, filter_name=None):
+        self.db = db
+        self.since = since
+        self.filter_name = filter_name
+
+    def wait(self, callback):
+        consumer = Consumer(db)
+
+        def process(change):
+            if change['seq'] > self.since:
+                self.since = change['seq']
+
+            callback(change)
+        
+        while True:
+            try:
+                consumer.wait(process, since = self.since, filter_name = self.filter_name)
+            except NoMoreData:
+                pass
 
 
 if __name__ == "__main__":
+    import sys
+    
     server = Server(COUCHDB)
     
-    ## TODO: use config file to get these
-    server.res.client.use_proxy = True
-    server.res.client.follow_redirect = True
-    #####
-    
     db = server.get_or_create_db(DB)
-    
-    ## TODO: again for db!?
-    db.res.client.use_proxy = True
-    db.res.client.follow_redirect = True
-    #####
-    
-    consumer = Consumer(db)
-    consumer.wait(consume_msg)#, filter_name="designname/filtername")
+
+    cw = ChangesWaiter(db)
+    cw.wait(lambda change: sys.stdout.write(str(change) + '\n'))

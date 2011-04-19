@@ -2,15 +2,12 @@ from couchdbkit import Server, Consumer
 
 from restkit.errors import NoMoreData
 
-from utils import patch_restkit
-patch_restkit()
-
 
 COUCHDB = "http://nettok:2600@ernesto-m.iriscouch.com/"
 DB = "mq0"
 
 
-class ChangesWaiter(object):
+class ReconnectingChangesWaiter(object):
     def __init__(self, db, since=0, filter_name=None):
         self.db = db
         self.since = since
@@ -35,9 +32,9 @@ class ChangesWaiter(object):
 if __name__ == "__main__":
     import sys
     
-    server = Server(COUCHDB)
+    server = Server(COUCHDB, use_proxy=True, follow_redirect=True)
     
     db = server.get_or_create_db(DB)
 
-    cw = ChangesWaiter(db)
-    cw.wait(lambda change: sys.stdout.write(str(change) + '\n'))
+    rcw = ReconnectingChangesWaiter(db)
+    rcw.wait(lambda change: sys.stdout.write(str(change) + '\n'))

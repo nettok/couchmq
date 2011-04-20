@@ -17,10 +17,16 @@ class ReconnectingChangesWaiter(object):
         consumer = Consumer(db)
 
         def process(change):
-            if change['seq'] > self.since:
-                self.since = change['seq']
+            seq = change.get('seq')
+            last_seq = change.get('last_seq')
 
-            callback(change)
+            if seq is not None:
+                if seq > self.since:
+                    self.since = seq
+                    
+                callback(change)
+            elif last_seq is not None:
+                self.since = last_seq
         
         while True:
             try:

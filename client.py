@@ -1,10 +1,7 @@
 from couchdbkit import Server, Consumer
-
 from restkit.errors import NoMoreData
 
-
-COUCHDB = "http://localhost:5984"
-DB = "mq0"
+import config as cfg
 
 
 class ReconnectingChangesWaiter(object):
@@ -38,9 +35,9 @@ class ReconnectingChangesWaiter(object):
 if __name__ == "__main__":
     import sys
     
-    server = Server(COUCHDB)
+    server = Server(cfg.server)
     
-    db = server.get_or_create_db(DB)
+    db = server.get_or_create_db(cfg.db)
 
     rcw = ReconnectingChangesWaiter(db)
     rcw.wait(lambda change: sys.stdout.write(str(change) + '\n'))

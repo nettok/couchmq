@@ -1,4 +1,7 @@
+from functools import partial
+
 from couchdbkit import Server, Consumer
+from couchdbkit.exceptions import ResourceConflict
 from restkit.errors import NoMoreData
 
 import config as cfg
@@ -33,7 +36,18 @@ class ReconnectingChangesWaiter(object):
                 consumer.wait(process, **self._params)
             except NoMoreData:
                 pass
+                
+                
+def reserve(db, change):
+    try:
+        body = db.res.put('_design/message/_update/reserve/%s' % change['id']).json_body
+    except ResourceConflict:
+        body = 'conflict while updating'
 
+    if body == 'ok':
+        print 'reserved:', change['id']
+    else:
+        print 'error:', body, change['id']
 
 if __name__ == "__main__":
     import sys
@@ -43,5 +57,4 @@ if __name__ == "__main__":
     db = server.get_or_create_db(cfg.db)
 
     rcw = ReconnectingChangesWaiter(db)
-    rcw.wait(lambda change: sys.stdout.write(str(change) + '\n'),
-             filter = 'message/state', state = 'available')
+    rcw.wait(partial(reserve, db), filter = 'message/state', state = 'available')
